@@ -82,6 +82,135 @@ private:
 
 
     // --------------------------------------------------------
+    // MERGE LISTAS
+    //
+    // Combina dos listas de raices (arboles binomiales) y
+    // consolida los arboles de igual grado, devolviendo la
+    // nueva lista de raices resultante.
+    //
+    // A diferencia de la version anterior, esta funcion NO
+    // depende del vector `pos` ni construye una ColaBinomial
+    // temporal: opera unicamente sobre punteros a NodoBinomial.
+    //
+    // Esto es lo que permite que insert(), extractMin() y
+    // merge() sean O(log n) en lugar de O(n): antes, cada una
+    // de esas operaciones creaba una ColaBinomial temporal con
+    // su propio vector `pos` de tamano n (temporal(pos.size())),
+    // lo que costaba O(n) por llamada. Como extractMin() se
+    // invoca n veces dentro de Prim, esto convertia el algoritmo
+    // completo en O(n^2), inviable para n = 2^22.
+    // --------------------------------------------------------
+
+    NodoBinomial* mergeListas(
+        NodoBinomial* head1,
+        NodoBinomial* head2
+    ) {
+
+        vector<NodoBinomial*> grados;
+
+        NodoBinomial* actual = head1;
+
+        while (actual != nullptr) {
+
+            NodoBinomial* siguiente = actual->sibling;
+
+            actual->sibling = nullptr;
+            actual->parent = nullptr;
+
+            grados.push_back(actual);
+
+            actual = siguiente;
+        }
+
+        actual = head2;
+
+        while (actual != nullptr) {
+
+            NodoBinomial* siguiente = actual->sibling;
+
+            actual->sibling = nullptr;
+            actual->parent = nullptr;
+
+            grados.push_back(actual);
+
+            actual = siguiente;
+        }
+
+
+        // ----------------------------------------------------
+        // Consolidamos arboles con igual grado
+        // ----------------------------------------------------
+
+        vector<NodoBinomial*> tabla;
+
+        for (NodoBinomial* arbol : grados) {
+
+            NodoBinomial* actualArbol = arbol;
+
+            int grado = actualArbol->degree;
+
+            while (true) {
+
+                if (grado >= (int)tabla.size()) {
+                    tabla.resize(grado + 1, nullptr);
+                }
+
+                // No hay otro arbol de este grado
+                if (tabla[grado] == nullptr) {
+
+                    tabla[grado] = actualArbol;
+
+                    break;
+                }
+
+                // Ya existe otro arbol del mismo grado
+                NodoBinomial* otroArbol = tabla[grado];
+
+                tabla[grado] = nullptr;
+
+                actualArbol = link(
+                    actualArbol,
+                    otroArbol
+                );
+
+                grado = actualArbol->degree;
+            }
+        }
+
+
+        // ----------------------------------------------------
+        // Reconstruimos la lista de raices
+        // ----------------------------------------------------
+
+        NodoBinomial* nuevoHead = nullptr;
+        NodoBinomial* ultimo = nullptr;
+
+        for (NodoBinomial* arbol : tabla) {
+
+            if (arbol == nullptr) {
+                continue;
+            }
+
+            arbol->parent = nullptr;
+            arbol->sibling = nullptr;
+
+            if (nuevoHead == nullptr) {
+
+                nuevoHead = arbol;
+                ultimo = arbol;
+
+            } else {
+
+                ultimo->sibling = arbol;
+                ultimo = arbol;
+            }
+        }
+
+        return nuevoHead;
+    }
+
+
+    // --------------------------------------------------------
     // ACTUALIZAR MINIMUM
     // --------------------------------------------------------
 
@@ -131,123 +260,9 @@ public:
             return;
         }
 
-
-        // ----------------------------------------------------
-        // Reunimos los arboles de ambas colas
-        // ----------------------------------------------------
-
-        vector<NodoBinomial*> grados;
-
-        NodoBinomial* actual = head;
-
-        while (actual != nullptr) {
-
-            NodoBinomial* siguiente = actual->sibling;
-
-            actual->sibling = nullptr;
-            actual->parent = nullptr;
-
-            grados.push_back(actual);
-
-            actual = siguiente;
-        }
-
-
-        actual = otra.head;
-
-        while (actual != nullptr) {
-
-            NodoBinomial* siguiente = actual->sibling;
-
-            actual->sibling = nullptr;
-            actual->parent = nullptr;
-
-            grados.push_back(actual);
-
-            actual = siguiente;
-        }
-
-
-        // ----------------------------------------------------
-        // Consolidamos arboles con igual grado
-        // ----------------------------------------------------
-
-        vector<NodoBinomial*> tabla;
-
-        for (NodoBinomial* arbol : grados) {
-
-            NodoBinomial* actualArbol = arbol;
-
-            int grado = actualArbol->degree;
-
-            while (true) {
-
-                if (grado >= (int)tabla.size()) {
-                    tabla.resize(grado + 1, nullptr);
-                }
-
-
-                // No hay otro arbol de este grado
-                if (tabla[grado] == nullptr) {
-
-                    tabla[grado] = actualArbol;
-
-                    break;
-                }
-
-
-                // Ya existe otro arbol del mismo grado
-                NodoBinomial* otroArbol = tabla[grado];
-
-                tabla[grado] = nullptr;
-
-                actualArbol = link(
-                    actualArbol,
-                    otroArbol
-                );
-
-                grado = actualArbol->degree;
-            }
-        }
-
-
-        // ----------------------------------------------------
-        // Reconstruimos lista de raices
-        // ----------------------------------------------------
-
-        head = nullptr;
-
-        NodoBinomial* ultimo = nullptr;
-
-        for (NodoBinomial* arbol : tabla) {
-
-            if (arbol == nullptr) {
-                continue;
-            }
-
-            arbol->parent = nullptr;
-            arbol->sibling = nullptr;
-
-
-            if (head == nullptr) {
-
-                head = arbol;
-                ultimo = arbol;
-
-            } else {
-
-                ultimo->sibling = arbol;
-                ultimo = arbol;
-            }
-        }
-
-
-        // ----------------------------------------------------
-        // Actualizamos el minimo
-        // ----------------------------------------------------
+        head = mergeListas(head, otra.head);
 
         actualizarMinimum();
-
 
         // La otra cola queda vacia
         otra.head = nullptr;
@@ -264,19 +279,11 @@ public:
         NodoBinomial* nodo =
             new NodoBinomial(vertex, key);
 
-
-        ColaBinomial temporal(pos.size());
-
-        temporal.head = nodo;
-        temporal.minimum = nodo;
-
-        temporal.pos[vertex] = nodo;
-
-
-        merge(temporal);
-
+        head = mergeListas(head, nodo);
 
         pos[vertex] = nodo;
+
+        actualizarMinimum();
     }
 
 
@@ -333,7 +340,8 @@ public:
 
 
         // ----------------------------------------------------
-        // Convertimos los hijos del minimo en raices
+        // Convertimos los hijos del minimo en una lista de
+        // raices independiente
         // ----------------------------------------------------
 
         NodoBinomial* hijo = minimo->child;
@@ -341,14 +349,12 @@ public:
         NodoBinomial* nuevoHead = nullptr;
         NodoBinomial* ultimoHijo = nullptr;
 
-
         while (hijo != nullptr) {
 
             NodoBinomial* siguiente = hijo->sibling;
 
             hijo->parent = nullptr;
             hijo->sibling = nullptr;
-
 
             if (nuevoHead == nullptr) {
 
@@ -361,31 +367,7 @@ public:
                 ultimoHijo = hijo;
             }
 
-
             hijo = siguiente;
-        }
-
-
-        // ----------------------------------------------------
-        // Agregamos los hijos a la lista de raices
-        // ----------------------------------------------------
-
-        if (nuevoHead != nullptr) {
-
-            if (head == nullptr) {
-
-                head = nuevoHead;
-
-            } else {
-
-                NodoBinomial* ultimo = head;
-
-                while (ultimo->sibling != nullptr) {
-                    ultimo = ultimo->sibling;
-                }
-
-                ultimo->sibling = nuevoHead;
-            }
         }
 
 
@@ -397,21 +379,15 @@ public:
 
 
         // ----------------------------------------------------
-        // Consolidamos nuevamente
+        // Fusionamos la lista de raices restante con los
+        // hijos del minimo, consolidando arboles de igual
+        // grado. mergeListas() no toca `pos`, por lo que este
+        // paso es O(log n) y no O(n).
         // ----------------------------------------------------
 
-        ColaBinomial temporal(pos.size());
+        head = mergeListas(head, nuevoHead);
 
-        temporal.head = head;
-
-        temporal.actualizarMinimum();
-
-
-        head = nullptr;
-        minimum = nullptr;
-
-
-        merge(temporal);
+        actualizarMinimum();
 
 
         // ----------------------------------------------------
@@ -538,7 +514,7 @@ public:
 
 
         // ----------------------------------------------------
-        // Creamos todos los arboles B0
+        // Creamos todos los arboles B0 y los consolidamos
         // ----------------------------------------------------
 
         for (int vertex = 0; vertex < n; vertex++) {
@@ -555,10 +531,6 @@ public:
 
             int grado = actual->degree;
 
-
-            // ------------------------------------------------
-            // Consolidamos
-            // ------------------------------------------------
 
             while (true) {
 
@@ -709,55 +681,27 @@ vector<vector<Arista>> leerGrafo(
     int n;
     int m;
 
-
-    // Primera linea:
-    //
-    // 16 32
-    //
-
     archivo >> n >> m;
 
 
     vector<vector<Arista>> grafo(n);
 
 
-    // --------------------------------------------------------
-    // Leemos cada vertice
-    // --------------------------------------------------------
-
     for (int i = 0; i < n; i++) {
 
         int vertice;
         char dosPuntos;
 
-
-        // Ejemplo:
-        //
-        // 0:
-        //
-
         archivo >> vertice >> dosPuntos;
-
-
-        // ----------------------------------------------------
-        // Leemos el resto de la linea
-        //
-        // Ejemplo:
-        //
-        // 1 0.316376 2 0.0397605 3 0.567725
-        // ----------------------------------------------------
 
         string linea;
 
         getline(archivo, linea);
 
-
         stringstream ss(linea);
-
 
         int vecino;
         double peso;
-
 
         while (ss >> vecino >> peso) {
 
@@ -765,7 +709,6 @@ vector<vector<Arista>> leerGrafo(
 
             arista.destino = vecino;
             arista.peso = peso;
-
 
             grafo[vertice].push_back(arista);
         }
@@ -825,6 +768,8 @@ vector<AristaMST> primBinomial(
 
     vector<AristaMST> MST;
 
+    MST.reserve(n > 0 ? n - 1 : 0);
+
 
     // --------------------------------------------------------
     // Mientras Q no este vacia
@@ -832,14 +777,8 @@ vector<AristaMST> primBinomial(
 
     while (Q.findMin() != nullptr) {
 
-
-        // ----------------------------------------------------
-        // Extract Min
-        // ----------------------------------------------------
-
         NodoBinomial* nodo =
             Q.extractMin();
-
 
         int u = nodo->vertex;
 
@@ -857,7 +796,6 @@ vector<AristaMST> primBinomial(
             arista.destino = u;
             arista.peso = costos[u];
 
-
             MST.push_back(arista);
         }
 
@@ -871,28 +809,13 @@ vector<AristaMST> primBinomial(
             int v = arista.destino;
             double peso = arista.peso;
 
-
-            // ------------------------------------------------
-            // Si v todavia esta en Q
-            // ------------------------------------------------
-
             if (Q.contiene(v)) {
-
-
-                // --------------------------------------------
-                // Encontramos una mejor conexion
-                // --------------------------------------------
 
                 if (peso < costos[v]) {
 
                     costos[v] = peso;
 
                     parent[v] = u;
-
-
-                    // ----------------------------------------
-                    // Decrease Key
-                    // ----------------------------------------
 
                     Q.decreaseKey(
                         v,
@@ -901,7 +824,6 @@ vector<AristaMST> primBinomial(
                 }
             }
         }
-
 
         delete nodo;
     }
@@ -917,18 +839,18 @@ vector<AristaMST> primBinomial(
 
 int main() {
 
-    cout << "==================================" << endl;
-    cout << "     PRIM CON COLA BINOMIAL       " << endl;
-    cout << "==================================" << endl;
+    cout << "============================================" << endl;
+    cout << "        PRIM CON COLA BINOMIAL              " << endl;
+    cout << "        Configuracion: i = 22, j = 24      " << endl;
+    cout << "============================================" << endl;
     cout << endl;
 
 
     // --------------------------------------------------------
-    // Archivo
+    // ARCHIVO DEL GRAFO
     // --------------------------------------------------------
 
-    string nombreArchivo =
-        "grafo_i4_j5.txt";
+    string nombreArchivo = "grafo_i22_j24.txt";
 
 
     cout << "Leyendo: "
@@ -937,16 +859,15 @@ int main() {
 
 
     // --------------------------------------------------------
-    // Leemos el grafo
+    // LECTURA DEL GRAFO
+    //
+    // IMPORTANTE:
+    // La lectura NO se incluye en la medicion del tiempo.
     // --------------------------------------------------------
 
     vector<vector<Arista>> grafo =
         leerGrafo(nombreArchivo);
 
-
-    // --------------------------------------------------------
-    // Verificamos
-    // --------------------------------------------------------
 
     if (grafo.empty()) {
 
@@ -967,24 +888,16 @@ int main() {
 
 
     // --------------------------------------------------------
-    // Contamos las adyacencias
-    //
-    // Como cada arista no dirigida aparece dos veces:
-    //
-    // 32 aristas -> 64 adyacencias
+    // CONTAMOS LAS ADYACENCIAS
     // --------------------------------------------------------
 
-    int cantidadAdyacencias = 0;
+    long long cantidadAdyacencias = 0;
 
+    for (int u = 0;
+         u < (int)grafo.size();
+         u++) {
 
-    for (
-        int u = 0;
-        u < (int)grafo.size();
-        u++
-    ) {
-
-        cantidadAdyacencias +=
-            grafo[u].size();
+        cantidadAdyacencias += grafo[u].size();
     }
 
 
@@ -993,15 +906,33 @@ int main() {
          << endl;
 
 
-    // --------------------------------------------------------
-    // Ejecutamos Prim
-    // --------------------------------------------------------
-
     cout << endl;
+
+
+    // ========================================================
+    // MEDICION DEL TIEMPO
+    // ========================================================
+    //
+    // La medicion comienza JUSTO antes de ejecutar Prim.
+    //
+    // Por lo tanto:
+    //
+    //   - Generacion del grafo: NO incluida
+    //   - Lectura del archivo:  NO incluida
+    //   - Ejecucion de Prim:    SI incluida
+    //
+    // ========================================================
 
     cout << "Ejecutando Prim..."
          << endl;
 
+
+    clock_t inicio = clock();
+
+
+    // --------------------------------------------------------
+    // EJECUTAMOS PRIM
+    // --------------------------------------------------------
 
     vector<AristaMST> MST =
         primBinomial(
@@ -1010,11 +941,75 @@ int main() {
         );
 
 
+    clock_t fin = clock();
+
+
     // --------------------------------------------------------
-    // Resultado
+    // CALCULAMOS EL TIEMPO
     // --------------------------------------------------------
 
+    double tiempoSegundos =
+        double(fin - inicio) / CLOCKS_PER_SEC;
+
+
+    double tiempoMilisegundos =
+        tiempoSegundos * 1000.0;
+
+
+    // ========================================================
+    // CALCULAMOS EL PESO TOTAL DEL MST
+    //
+    // Esto ocurre DESPUES de detener el reloj, por lo que
+    // tampoco forma parte del tiempo medido de Prim.
+    // ========================================================
+
+    double pesoTotal = 0.0;
+
+
+    for (const AristaMST& arista : MST) {
+
+        pesoTotal += arista.peso;
+    }
+
+
+    // ========================================================
+    // RESULTADOS
+    // ========================================================
+
     cout << endl;
+
+    cout << "============================================"
+         << endl;
+
+    cout << "                 RESULTADOS"
+         << endl;
+
+    cout << "============================================"
+         << endl;
+
+    cout << endl;
+
+
+    cout << "Configuracion:"
+         << endl;
+
+    cout << "i = 22"
+         << endl;
+
+    cout << "j = 24"
+         << endl;
+
+    cout << endl;
+
+
+    cout << "Numero de vertices: "
+         << grafo.size()
+         << endl;
+
+
+    cout << "Numero de adyacencias: "
+         << cantidadAdyacencias
+         << endl;
 
 
     cout << "Numero de aristas del MST: "
@@ -1022,53 +1017,31 @@ int main() {
          << endl;
 
 
+    cout << endl;
+
+
     // --------------------------------------------------------
-    // TEST
+    // VERIFICACION DE QUE ES UN ARBOL COBERTOR
     // --------------------------------------------------------
 
-    if (
-        MST.size() ==
-        grafo.size() - 1
-    ) {
+    if (MST.size() == grafo.size() - 1) {
 
-        cout << "Prim: OK"
+        cout << "Verificacion del MST: OK"
              << endl;
 
     } else {
 
-        cout << "Prim: ERROR"
+        cout << "Verificacion del MST: ERROR"
              << endl;
     }
 
 
-    // --------------------------------------------------------
-    // Mostramos el MST
-    // --------------------------------------------------------
-
     cout << endl;
 
-    cout << "Aristas del MST:"
-         << endl;
 
-
-    double pesoTotal = 0.0;
-
-
-    for (const AristaMST& arista : MST) {
-
-        cout << arista.origen
-             << " -- "
-             << arista.destino
-             << "  peso = "
-             << arista.peso
-             << endl;
-
-
-        pesoTotal += arista.peso;
-    }
-
-
-    cout << endl;
+    // --------------------------------------------------------
+    // PESO TOTAL
+    // --------------------------------------------------------
 
     cout << "Peso total del MST: "
          << pesoTotal
@@ -1077,7 +1050,30 @@ int main() {
 
     cout << endl;
 
-    cout << "=================================="
+
+    // --------------------------------------------------------
+    // TIEMPO DE EJECUCION
+    // --------------------------------------------------------
+
+    cout << "Tiempo de ejecucion de Prim:"
+         << endl;
+
+    cout << "  "
+         << tiempoMilisegundos
+         << " ms"
+         << endl;
+
+
+    cout << "  "
+         << tiempoSegundos
+         << " s"
+         << endl;
+
+
+    cout << endl;
+
+
+    cout << "============================================"
          << endl;
 
 

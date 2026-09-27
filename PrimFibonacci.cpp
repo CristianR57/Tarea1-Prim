@@ -62,6 +62,29 @@ private:
     int cantidad;
 
 
+    // --------------------------------------------------------
+    // BUFFERS REUTILIZABLES
+    //
+    // consolidar() y extractMin() se llaman n veces dentro de
+    // Prim. Antes, cada llamada a consolidar() reservaba un
+    // vector<NodoFibonacci*> A(100, nullptr) nuevo (con un
+    // grado maximo "adivinado" a mano), y extractMin() reservaba
+    // un vector<NodoFibonacci*> hijos nuevo cada vez. Con
+    // n = 2^22, eso son millones de reservas/liberaciones de
+    // memoria innecesarias en el camino caliente del algoritmo.
+    //
+    // tablaGrados, raices e hijos son ahora buffers del propio
+    // objeto: se reutilizan entre llamadas (solo se limpian,
+    // sin liberar memoria), y tablaGrados crece dinamicamente
+    // segun el grado maximo real alcanzado, en vez de un tamano
+    // fijo arbitrario.
+    // --------------------------------------------------------
+
+    vector<NodoFibonacci*> tablaGrados;
+    vector<NodoFibonacci*> raices;
+    vector<NodoFibonacci*> hijos;
+
+
     // ========================================================
     // AGREGAR RAIZ
     // ========================================================
@@ -304,17 +327,11 @@ public:
         }
 
 
-        int maxDegree = 100;
+        // ----------------------------------------------------
+        // Recolectamos las raices actuales (buffer reutilizado)
+        // ----------------------------------------------------
 
-
-        vector<NodoFibonacci*> A(
-            maxDegree,
-            nullptr
-        );
-
-
-        vector<NodoFibonacci*> raices;
-
+        raices.clear();
 
         NodoFibonacci* actual = minimum;
 
@@ -329,39 +346,53 @@ public:
 
 
         // ----------------------------------------------------
-        // Consolidamos arboles del mismo grado
+        // Consolidamos arboles del mismo grado.
+        //
+        // tablaGrados crece dinamicamente segun el grado que
+        // realmente aparece (nunca mas de O(log n)) y se deja
+        // en nullptr al terminar, lista para la proxima llamada.
         // ----------------------------------------------------
 
         for (NodoFibonacci* x : raices) {
 
             int d = x->degree;
 
+            while ((int)tablaGrados.size() <= d) {
+                tablaGrados.push_back(nullptr);
+            }
 
-            while (A[d] != nullptr) {
 
-                NodoFibonacci* y = A[d];
+            while (tablaGrados[d] != nullptr) {
 
-                A[d] = nullptr;
+                NodoFibonacci* y = tablaGrados[d];
+
+                tablaGrados[d] = nullptr;
 
 
                 x = link(x, y);
 
                 d = x->degree;
+
+
+                while ((int)tablaGrados.size() <= d) {
+                    tablaGrados.push_back(nullptr);
+                }
             }
 
 
-            A[d] = x;
+            tablaGrados[d] = x;
         }
 
 
         // ----------------------------------------------------
-        // Reconstruimos la lista de raices
+        // Reconstruimos la lista de raices y dejamos
+        // tablaGrados en nullptr para la proxima consolidacion.
         // ----------------------------------------------------
 
         minimum = nullptr;
 
 
-        for (NodoFibonacci* x : A) {
+        for (NodoFibonacci*& x : tablaGrados) {
 
             if (x == nullptr) {
 
@@ -374,6 +405,8 @@ public:
 
 
             agregarRaiz(x);
+
+            x = nullptr;
         }
     }
 
@@ -394,7 +427,7 @@ public:
 
 
         // ----------------------------------------------------
-        // Los hijos de z pasan a ser raices
+        // Los hijos de z pasan a ser raices (buffer reutilizado)
         // ----------------------------------------------------
 
         if (z->child != nullptr) {
@@ -406,7 +439,7 @@ public:
                 hijoInicial;
 
 
-            vector<NodoFibonacci*> hijos;
+            hijos.clear();
 
 
             do {
@@ -539,39 +572,45 @@ public:
 
     // ========================================================
     // CASCADING CUT
+    //
+    // El pseudocodigo es recursivo (cascadingCut se llama a si
+    // misma sobre el padre), pero esa recursion es de cola: en
+    // cada paso solo queda pendiente "seguir subiendo con z".
+    // Se implementa aqui como un bucle iterativo, que hace
+    // exactamente lo mismo pero sin apilar un frame de funcion
+    // por cada corte en cascada, lo cual importa cuando
+    // decreaseKey se llama del orden de 2^24 veces.
     // ========================================================
 
     void cascadingCut(
         NodoFibonacci* y
     ) {
 
-        if (y == nullptr) {
+        while (y != nullptr) {
 
-            return;
+            NodoFibonacci* z =
+                y->parent;
+
+
+            if (z == nullptr) {
+
+                return;
+            }
+
+
+            if (y->flag == false) {
+
+                y->flag = true;
+
+                return;
+            }
+
+
+            cut(y, z);
+
+
+            y = z;
         }
-
-
-        NodoFibonacci* z =
-            y->parent;
-
-
-        if (z == nullptr) {
-
-            return;
-        }
-
-
-        if (y->flag == false) {
-
-            y->flag = true;
-
-            return;
-        }
-
-
-        cut(y, z);
-
-        cascadingCut(z);
     }
 
 
@@ -666,7 +705,7 @@ public:
 
 
         // ----------------------------------------------------
-        // Se viola la propiedad
+        // Se viola la propiedad: cut + cascadingCut
         // ----------------------------------------------------
 
         cut(x, y);
@@ -704,6 +743,28 @@ public:
                  << endl;
 
             return;
+        }
+
+
+        // ----------------------------------------------------
+        // Reservamos pos de una sola vez segun el mayor
+        // vertice, en vez de dejar que cada insert() la vaya
+        // agrandando de a uno. Con n = 2^22 vertices esto
+        // evita realocaciones repetidas del vector global.
+        // ----------------------------------------------------
+
+        int maxVertice = -1;
+
+        for (int v : vertices) {
+
+            if (v > maxVertice) {
+                maxVertice = v;
+            }
+        }
+
+        if (maxVertice + 1 > (int)pos.size()) {
+
+            pos.resize(maxVertice + 1, nullptr);
         }
 
 
@@ -855,7 +916,7 @@ vector<vector<Arista>> leerGrafo(
 
 
 // ============================================================
-// PASO 12: PRIM CON COLA DE FIBONACCI
+// PRIM CON COLA DE FIBONACCI
 // ============================================================
 
 vector<AristaMST> primFibonacci(
@@ -920,6 +981,8 @@ vector<AristaMST> primFibonacci(
     // --------------------------------------------------------
 
     vector<AristaMST> MST;
+
+    MST.reserve(n > 0 ? n - 1 : 0);
 
 
     // --------------------------------------------------------
@@ -1040,27 +1103,19 @@ vector<AristaMST> primFibonacci(
 
 int main() {
 
+    cout << "============================================" << endl;
+    cout << "        PRIM CON COLA DE FIBONACCI          " << endl;
+    cout << "        Configuracion: i = 22, j = 24      " << endl;
+    cout << "============================================" << endl;
     cout << endl;
-
-    cout << "===================================================="
-         << endl;
-
-    cout << "          PRIM CON COLA DE FIBONACCI"
-         << endl;
-
-    cout << "===================================================="
-         << endl;
 
 
     // --------------------------------------------------------
-    // Archivo
+    // ARCHIVO DEL GRAFO
     // --------------------------------------------------------
 
-    string nombreArchivo =
-        "grafo_i4_j5.txt";
+    string nombreArchivo = "grafo_i22_j24.txt";
 
-
-    cout << endl;
 
     cout << "Leyendo: "
          << nombreArchivo
@@ -1068,22 +1123,17 @@ int main() {
 
 
     // --------------------------------------------------------
-    // Leemos el grafo
+    // LECTURA DEL GRAFO
+    //
+    // IMPORTANTE:
+    // La lectura NO se incluye en la medicion del tiempo.
     // --------------------------------------------------------
 
     vector<vector<Arista>> grafo =
-        leerGrafo(
-            nombreArchivo
-        );
+        leerGrafo(nombreArchivo);
 
 
-    // --------------------------------------------------------
-    // Verificamos
-    // --------------------------------------------------------
-
-    if (
-        grafo.empty()
-    ) {
+    if (grafo.empty()) {
 
         cerr << "ERROR: El grafo esta vacio."
              << endl;
@@ -1102,21 +1152,16 @@ int main() {
 
 
     // --------------------------------------------------------
-    // Contamos adyacencias
+    // CONTAMOS LAS ADYACENCIAS
     // --------------------------------------------------------
 
-    int cantidadAdyacencias =
-        0;
+    long long cantidadAdyacencias = 0;
 
+    for (int u = 0;
+         u < (int)grafo.size();
+         u++) {
 
-    for (
-        int u = 0;
-        u < (int)grafo.size();
-        u++
-    ) {
-
-        cantidadAdyacencias +=
-            grafo[u].size();
+        cantidadAdyacencias += grafo[u].size();
     }
 
 
@@ -1125,15 +1170,33 @@ int main() {
          << endl;
 
 
-    // --------------------------------------------------------
-    // Ejecutamos Prim
-    // --------------------------------------------------------
-
     cout << endl;
 
-    cout << "Ejecutando Prim con Cola de Fibonacci..."
+
+    // ========================================================
+    // MEDICION DEL TIEMPO
+    // ========================================================
+    //
+    // La medicion comienza JUSTO antes de ejecutar Prim.
+    //
+    // Por lo tanto:
+    //
+    //   - Generacion del grafo: NO incluida
+    //   - Lectura del archivo:  NO incluida
+    //   - Ejecucion de Prim:    SI incluida
+    //
+    // ========================================================
+
+    cout << "Ejecutando Prim..."
          << endl;
 
+
+    clock_t inicio = clock();
+
+
+    // --------------------------------------------------------
+    // EJECUTAMOS PRIM
+    // --------------------------------------------------------
 
     vector<AristaMST> MST =
         primFibonacci(
@@ -1142,71 +1205,107 @@ int main() {
         );
 
 
+    clock_t fin = clock();
+
+
     // --------------------------------------------------------
-    // Resultado
+    // CALCULAMOS EL TIEMPO
     // --------------------------------------------------------
 
+    double tiempoSegundos =
+        double(fin - inicio) / CLOCKS_PER_SEC;
+
+
+    double tiempoMilisegundos =
+        tiempoSegundos * 1000.0;
+
+
+    // ========================================================
+    // CALCULAMOS EL PESO TOTAL DEL MST
+    //
+    // Esto ocurre DESPUES de detener el reloj, por lo que
+    // tampoco forma parte del tiempo medido de Prim.
+    // ========================================================
+
+    double pesoTotal = 0.0;
+
+
+    for (const AristaMST& arista : MST) {
+
+        pesoTotal += arista.peso;
+    }
+
+
+    // ========================================================
+    // RESULTADOS
+    // ========================================================
+
     cout << endl;
+
+    cout << "============================================"
+         << endl;
+
+    cout << "                 RESULTADOS"
+         << endl;
+
+    cout << "============================================"
+         << endl;
+
+    cout << endl;
+
+
+    cout << "Configuracion:"
+         << endl;
+
+    cout << "i = 22"
+         << endl;
+
+    cout << "j = 24"
+         << endl;
+
+    cout << endl;
+
+
+    cout << "Numero de vertices: "
+         << grafo.size()
+         << endl;
+
+
+    cout << "Numero de adyacencias: "
+         << cantidadAdyacencias
+         << endl;
+
 
     cout << "Numero de aristas del MST: "
          << MST.size()
          << endl;
 
 
-    // --------------------------------------------------------
-    // TEST
-    // --------------------------------------------------------
-
-    if (
-        MST.size() ==
-        grafo.size() - 1
-    ) {
-
-        cout << "Prim Fibonacci: OK"
-             << endl;
-
-    }
-
-    else {
-
-        cout << "Prim Fibonacci: ERROR"
-             << endl;
-    }
-
-
-    // --------------------------------------------------------
-    // Mostramos MST
-    // --------------------------------------------------------
-
     cout << endl;
 
-    cout << "Aristas del MST:"
-         << endl;
 
+    // --------------------------------------------------------
+    // VERIFICACION DE QUE ES UN ARBOL COBERTOR
+    // --------------------------------------------------------
 
-    double pesoTotal =
-        0.0;
+    if (MST.size() == grafo.size() - 1) {
 
-
-    for (
-        const AristaMST& arista
-        : MST
-    ) {
-
-        cout << arista.origen
-             << " -- "
-             << arista.destino
-             << "  peso = "
-             << arista.peso
+        cout << "Verificacion del MST: OK"
              << endl;
 
+    } else {
 
-        pesoTotal +=
-            arista.peso;
+        cout << "Verificacion del MST: ERROR"
+             << endl;
     }
 
 
     cout << endl;
+
+
+    // --------------------------------------------------------
+    // PESO TOTAL
+    // --------------------------------------------------------
 
     cout << "Peso total del MST: "
          << pesoTotal
@@ -1215,7 +1314,30 @@ int main() {
 
     cout << endl;
 
-    cout << "===================================================="
+
+    // --------------------------------------------------------
+    // TIEMPO DE EJECUCION
+    // --------------------------------------------------------
+
+    cout << "Tiempo de ejecucion de Prim:"
+         << endl;
+
+    cout << "  "
+         << tiempoMilisegundos
+         << " ms"
+         << endl;
+
+
+    cout << "  "
+         << tiempoSegundos
+         << " s"
+         << endl;
+
+
+    cout << endl;
+
+
+    cout << "============================================"
          << endl;
 
 

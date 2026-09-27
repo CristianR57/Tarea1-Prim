@@ -15,8 +15,8 @@ int main() {
     // Parámetros del grafo
     // ==========================================
 
-    int i = 4;
-    int j = 5;
+    int i = 22;
+    int j = 24;
 
     int v = pow(2, i);
     int e = pow(2, j);

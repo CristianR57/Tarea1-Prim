@@ -4,6 +4,7 @@
 #include <sstream>
 #include <limits>
 #include <utility>
+#include <chrono>
 
 using namespace std;
 
@@ -915,7 +916,8 @@ int main() {
     //
     // La medicion comienza JUSTO antes de ejecutar Prim.
     //
-    // Por lo tanto:
+    // Se utiliza std::chrono::steady_clock porque es un
+    // reloj monotono apropiado para medir intervalos de tiempo.
     //
     //   - Generacion del grafo: NO incluida
     //   - Lectura del archivo:  NO incluida
@@ -927,7 +929,8 @@ int main() {
          << endl;
 
 
-    clock_t inicio = clock();
+    auto inicio =
+        std::chrono::steady_clock::now();
 
 
     // --------------------------------------------------------
@@ -941,7 +944,8 @@ int main() {
         );
 
 
-    clock_t fin = clock();
+    auto fin =
+        std::chrono::steady_clock::now();
 
 
     // --------------------------------------------------------
@@ -949,11 +953,15 @@ int main() {
     // --------------------------------------------------------
 
     double tiempoSegundos =
-        double(fin - inicio) / CLOCKS_PER_SEC;
+        std::chrono::duration<double>(
+            fin - inicio
+        ).count();
 
 
     double tiempoMilisegundos =
-        tiempoSegundos * 1000.0;
+        std::chrono::duration<double, std::milli>(
+            fin - inicio
+        ).count();
 
 
     // ========================================================

@@ -1104,250 +1104,124 @@ vector<AristaMST> primFibonacci(
 
 int main() {
 
+    int i = 20;
+    int j = 22;
+
     cout << "============================================" << endl;
     cout << "        PRIM CON COLA DE FIBONACCI          " << endl;
-    cout << "        Configuracion: i = 22, j = 24      " << endl;
+    cout << "        Configuracion: i = " << i
+         << ", j = " << j << "                 " << endl;
     cout << "============================================" << endl;
     cout << endl;
 
+    double sumaTiempos = 0.0;
 
-    // --------------------------------------------------------
-    // ARCHIVO DEL GRAFO
-    // --------------------------------------------------------
+    for (int semilla = 1; semilla <= 10; semilla++) {
 
-    string nombreArchivo = "grafo_i22_j24.txt";
+        string nombreArchivo =
+            "grafo_i" + to_string(i) +
+            "_j" + to_string(j) +
+            "_seed" + to_string(semilla) +
+            ".txt";
 
+        cout << "--------------------------------------------" << endl;
+        cout << "Semilla: " << semilla << endl;
+        cout << "Archivo: " << nombreArchivo << endl;
 
-    cout << "Leyendo: "
-         << nombreArchivo
-         << endl;
+        // Leer el grafo correspondiente a esta semilla
+        vector<vector<Arista>> grafo = leerGrafo(nombreArchivo);
 
+        if (grafo.empty()) {
+            cerr << "ERROR: El grafo esta vacio." << endl;
+            continue;
+        }
 
-    // --------------------------------------------------------
-    // LECTURA DEL GRAFO
-    //
-    // IMPORTANTE:
-    // La lectura NO se incluye en la medicion del tiempo.
-    // --------------------------------------------------------
+        cout << "Grafo leido correctamente." << endl;
+        cout << "Numero de vertices: " << grafo.size() << endl;
 
-    vector<vector<Arista>> grafo =
-        leerGrafo(nombreArchivo);
+        // Contar adyacencias almacenadas
+        long long cantidadAdyacencias = 0;
 
+        for (int u = 0; u < (int)grafo.size(); u++) {
+            cantidadAdyacencias += grafo[u].size();
+        }
 
-    if (grafo.empty()) {
+        cout << "Numero de adyacencias almacenadas: "
+             << cantidadAdyacencias << endl;
 
-        cerr << "ERROR: El grafo esta vacio."
-             << endl;
+        cout << "Ejecutando Prim..." << endl;
 
-        return 1;
+        // ==========================================
+        // MEDICION DEL TIEMPO
+        // ==========================================
+
+        auto inicio = std::chrono::steady_clock::now();
+
+        vector<AristaMST> MST = primFibonacci(grafo, 0);
+
+        auto fin = std::chrono::steady_clock::now();
+
+        double tiempoMilisegundos =
+            std::chrono::duration<double, std::milli>(
+                fin - inicio
+            ).count();
+
+        double tiempoSegundos =
+            std::chrono::duration<double>(
+                fin - inicio
+            ).count();
+
+        sumaTiempos += tiempoMilisegundos;
+
+        // ==========================================
+        // CALCULAR PESO TOTAL DEL MST
+        // ==========================================
+
+        double pesoTotal = 0.0;
+
+        for (const AristaMST& arista : MST) {
+            pesoTotal += arista.peso;
+        }
+
+        // ==========================================
+        // MOSTRAR RESULTADOS
+        // ==========================================
+
+        cout << "Prim terminado." << endl;
+        cout << "Aristas del MST: " << MST.size() << endl;
+
+        if (MST.size() == grafo.size() - 1) {
+            cout << "El MST tiene " << grafo.size() - 1
+                 << " aristas. CORRECTO." << endl;
+        }
+        else {
+            cout << "ADVERTENCIA: El MST no tiene "
+                 << grafo.size() - 1 << " aristas." << endl;
+        }
+
+        cout << "Peso total del MST: "
+             << pesoTotal << endl;
+
+        cout << "Tiempo de ejecucion: "
+             << tiempoMilisegundos << " ms" << endl;
+
+        cout << "Tiempo de ejecucion: "
+             << tiempoSegundos << " s" << endl;
+
+        cout << endl;
     }
 
+    cout << "============================================" << endl;
+    cout << "      FINALIZARON LAS 10 EJECUCIONES        " << endl;
+    cout << "============================================" << endl;
 
-    cout << "Grafo leido correctamente."
-         << endl;
-
-
-    cout << "Numero de vertices: "
-         << grafo.size()
-         << endl;
-
-
-    // --------------------------------------------------------
-    // CONTAMOS LAS ADYACENCIAS
-    // --------------------------------------------------------
-
-    long long cantidadAdyacencias = 0;
-
-    for (int u = 0;
-         u < (int)grafo.size();
-         u++) {
-
-        cantidadAdyacencias += grafo[u].size();
-    }
-
-
-    cout << "Numero de adyacencias almacenadas: "
-         << cantidadAdyacencias
-         << endl;
-
+    double promedioMilisegundos = sumaTiempos / 10.0;
+    double promedioSegundos = promedioMilisegundos / 1000.0;
 
     cout << endl;
-
-
-    // ========================================================
-    // MEDICION DEL TIEMPO
-    // ========================================================
-    //
-    // La medicion comienza JUSTO antes de ejecutar Prim.
-    //
-    // Se utiliza std::chrono::steady_clock porque es un
-    // reloj monotono apropiado para medir intervalos de tiempo.
-    //
-    //   - Generacion del grafo: NO incluida
-    //   - Lectura del archivo:  NO incluida
-    //   - Ejecucion de Prim:    SI incluida
-    //
-    // ========================================================
-
-    cout << "Ejecutando Prim..."
-         << endl;
-
-
-    auto inicio =
-        std::chrono::steady_clock::now();
-
-
-    // --------------------------------------------------------
-    // EJECUTAMOS PRIM
-    // --------------------------------------------------------
-
-    vector<AristaMST> MST =
-        primFibonacci(
-            grafo,
-            0
-        );
-
-
-    auto fin =
-        std::chrono::steady_clock::now();
-
-
-    // --------------------------------------------------------
-    // CALCULAMOS EL TIEMPO
-    // --------------------------------------------------------
-
-    double tiempoSegundos =
-        std::chrono::duration<double>(
-            fin - inicio
-        ).count();
-
-
-    double tiempoMilisegundos =
-        std::chrono::duration<double, std::milli>(
-            fin - inicio
-        ).count();
-
-
-    // ========================================================
-    // CALCULAMOS EL PESO TOTAL DEL MST
-    //
-    // Esto ocurre DESPUES de detener el reloj, por lo que
-    // tampoco forma parte del tiempo medido de Prim.
-    // ========================================================
-
-    double pesoTotal = 0.0;
-
-
-    for (const AristaMST& arista : MST) {
-
-        pesoTotal += arista.peso;
-    }
-
-
-    // ========================================================
-    // RESULTADOS
-    // ========================================================
-
-    cout << endl;
-
-    cout << "============================================"
-         << endl;
-
-    cout << "                 RESULTADOS"
-         << endl;
-
-    cout << "============================================"
-         << endl;
-
-    cout << endl;
-
-
-    cout << "Configuracion:"
-         << endl;
-
-    cout << "i = 22"
-         << endl;
-
-    cout << "j = 24"
-         << endl;
-
-    cout << endl;
-
-
-    cout << "Numero de vertices: "
-         << grafo.size()
-         << endl;
-
-
-    cout << "Numero de adyacencias: "
-         << cantidadAdyacencias
-         << endl;
-
-
-    cout << "Numero de aristas del MST: "
-         << MST.size()
-         << endl;
-
-
-    cout << endl;
-
-
-    // --------------------------------------------------------
-    // VERIFICACION DE QUE ES UN ARBOL COBERTOR
-    // --------------------------------------------------------
-
-    if (MST.size() == grafo.size() - 1) {
-
-        cout << "Verificacion del MST: OK"
-             << endl;
-
-    } else {
-
-        cout << "Verificacion del MST: ERROR"
-             << endl;
-    }
-
-
-    cout << endl;
-
-
-    // --------------------------------------------------------
-    // PESO TOTAL
-    // --------------------------------------------------------
-
-    cout << "Peso total del MST: "
-         << pesoTotal
-         << endl;
-
-
-    cout << endl;
-
-
-    // --------------------------------------------------------
-    // TIEMPO DE EJECUCION
-    // --------------------------------------------------------
-
-    cout << "Tiempo de ejecucion de Prim:"
-         << endl;
-
-    cout << "  "
-         << tiempoMilisegundos
-         << " ms"
-         << endl;
-
-
-    cout << "  "
-         << tiempoSegundos
-         << " s"
-         << endl;
-
-
-    cout << endl;
-
-
-    cout << "============================================"
-         << endl;
-
+    cout << "Promedio de tiempo de ejecucion:" << endl;
+    cout << "  " << promedioMilisegundos << " ms" << endl;
+    cout << "  " << promedioSegundos << " s" << endl;
 
     return 0;
 }
